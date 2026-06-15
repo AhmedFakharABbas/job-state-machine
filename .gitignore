@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+.next/
+out/
+coverage/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime files
+*.pid
+*.seed
+*.pid.lock
+
+# Testing
+playwright-report/
+test-results/
+
+# Docker
+docker-data/
+
+# TypeScript
+*.tsbuildinfo
+
+# NestJS
+dist/
+
+# Misc
+.tmp/
+.temp/
+.cache/
+
+# Package managers
+.yarn/
+.pnpm-store/
+
+# Keep lock files
+# package-lock.json
