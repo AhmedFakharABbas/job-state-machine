@@ -12,7 +12,6 @@ Before running the application, ensure the following tools are installed on your
 | Node.js | >= 22.x |
 | npm | >= 10.x |
 | Docker | >= 27.x |
-| Docker Compose | >= 2.x |
 | Git | Latest |
 
 ### Verify installation
