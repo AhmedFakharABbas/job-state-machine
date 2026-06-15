@@ -2,6 +2,29 @@
 
 NestJS backend (HTTP API + Socket.IO) and Next.js operator dashboard for submitting and monitoring asset jobs. Jobs progress through `PENDING → RUNNING → COMPLETED` (or `FAILED` for `asset-fault`) on internal timers, with live updates pushed over Socket.IO.
 
+
+## Requirements
+
+Before running the application, ensure the following tools are installed on your machine:
+
+| Tool | Recommended Version |
+|--------|-------------------|
+| Node.js | >= 22.x |
+| npm | >= 10.x |
+| Docker | >= 27.x |
+| Docker Compose | >= 2.x |
+| Git | Latest |
+
+### Verify installation
+
+```bash
+node -v
+npm -v
+docker -v
+docker compose version
+git --version
+```
+
 ## How to run
 
 ```bash
