@@ -1,18 +1,23 @@
-# Full-Stack Job Operations Application
+# Real-Time Job Tracking System (NestJS + Socket.IO + Next.js)
 
-NestJS backend (HTTP API + Socket.IO) and Next.js operator dashboard for submitting and monitoring asset jobs. Jobs progress through `PENDING → RUNNING → COMPLETED` (or `FAILED` for `asset-fault`) on internal timers, with live updates pushed over Socket.IO.
+A backend system for tracking long-running jobs (asset processing, file jobs, background tasks — the pattern fits any "submit a job, watch it progress" use case) with live status updates pushed to the browser instead of polling.
 
+Jobs move through `PENDING → RUNNING → COMPLETED` (or `FAILED` on a simulated fault), and every state change is pushed over a Socket.IO connection scoped to the user who owns the job — not broadcast to everyone connected. Built end-to-end: NestJS API, Socket.IO gateway, Next.js dashboard, auth on both the HTTP and WebSocket layers, and a full test suite (Jest + Playwright).
+
+**Why this matters if you're evaluating it for a real project:** most "real-time" demos just blast socket events to every connected client and call it done. This one handles the parts that actually break in production — per-user room scoping so users don't see each other's jobs, token auth on the socket handshake itself (not just the HTTP routes), and a documented state machine instead of ad-hoc timers scattered through the code. It's also explicit about what's cut for scope (in-memory storage, static tokens) versus what a production version would need (DB-backed recovery, JWT) — see Trade-offs below.
+
+Originally built as a timed technical exercise (~6 hours), which is part of why the scope is intentionally tight.
+
+---
 
 ## Requirements
 
-Before running the application, ensure the following tools are installed on your machine:
-
-| Tool | Recommended Version |
-|--------|-------------------|
-| Node.js | >= 22.x |
-| npm | >= 10.x |
-| Docker | >= 27.x |
-| Git | Latest |
+| Tool    | Recommended Version |
+| ------- | -------------------- |
+| Node.js | >= 22.x              |
+| npm     | >= 10.x              |
+| Docker  | >= 27.x              |
+| Git     | Latest               |
 
 ### Verify installation
 
@@ -23,6 +28,8 @@ docker -v
 docker compose version
 git --version
 ```
+
+---
 
 ## How to run
 
@@ -76,10 +83,10 @@ npx playwright test
 **Test tokens** (`data/seed.json`):
 
 | User  | Token                    |
-|-------|--------------------------|
+| ----- | ------------------------ |
 | Alice | `tok_alice_a1b2c3d4e5f6` |
-| Bob   | `tok_bob_b2c3d4e5f6a1`  |
-| Carol | `tok_carol_c3d4e5f6a1b2`|
+| Bob   | `tok_bob_b2c3d4e5f6a1`   |
+| Carol | `tok_carol_c3d4e5f6a1b2` |
 
 ---
 
@@ -89,15 +96,15 @@ npx playwright test
 
 A single NestJS process with feature modules separating routing, validation, persistence, state machine, and real-time updates:
 
-| Module | Files | Responsibility |
-|--------|-------|----------------|
-| `AppConfigModule` | `config/` | Environment configuration (global) |
-| `HealthModule` | `health/` | `GET /health` liveness |
-| `SeedModule` | `seed/` | Load users/assets from `seed.json` |
-| `AuthModule` | `auth/` | Bearer token guard + `@UserId()` decorator |
-| `JobsModule` | `jobs/` | REST API, validation, in-memory persistence |
-| `StateMachineModule` | `state-machine/` | Timer-driven `PENDING → RUNNING → terminal` |
-| `SocketModule` | `socket/` | Socket.IO gateway, per-user rooms, `job_update` |
+| Module               | Files            | Responsibility                                  |
+| --------------------- | ---------------- | ------------------------------------------------ |
+| `AppConfigModule`     | `config/`         | Environment configuration (global)               |
+| `HealthModule`        | `health/`         | `GET /health` liveness                           |
+| `SeedModule`          | `seed/`           | Load users/assets from `seed.json`               |
+| `AuthModule`          | `auth/`           | Bearer token guard + `@UserId()` decorator       |
+| `JobsModule`          | `jobs/`           | REST API, validation, in-memory persistence      |
+| `StateMachineModule`  | `state-machine/`  | Timer-driven `PENDING → RUNNING → terminal`      |
+| `SocketModule`        | `socket/`         | Socket.IO gateway, per-user rooms, `job_update`  |
 
 ```
 Browser ──Bearer HTTP──► JobsController ──► JobsService (in-memory)
@@ -111,13 +118,13 @@ Browser ──Bearer HTTP──► JobsController ──► JobsService (in-memo
 
 ### Frontend — Next.js App Router (port 3000)
 
-| Area | Location | Responsibility |
-|------|----------|----------------|
-| Pages | `src/app/login`, `src/app/` | Token login, dashboard |
-| API client | `src/lib/api.ts` | Authenticated HTTP to backend |
-| Auth | `src/lib/auth.ts` | `localStorage` token storage |
-| Socket hook | `src/hooks/useJobSocket.ts` | `job_update` subscription |
-| Components | `src/components/*` | Form, job list, logout (`data-testid`s per §5.4) |
+| Area        | Location                     | Responsibility                                    |
+| ----------- | ----------------------------- | --------------------------------------------------- |
+| Pages       | `src/app/login`, `src/app/`   | Token login, dashboard                              |
+| API client  | `src/lib/api.ts`               | Authenticated HTTP to backend                       |
+| Auth        | `src/lib/auth.ts`               | `localStorage` token storage                        |
+| Socket hook | `src/hooks/useJobSocket.ts`     | `job_update` subscription                           |
+| Components  | `src/components/*`             | Form, job list, logout (`data-testid`s per spec)    |
 
 ---
 
@@ -130,16 +137,16 @@ After `POST /api/jobs` returns `201` with `state: PENDING`:
 
 Implemented in `StateMachineService` using `setTimeout` chains. Only these transitions are produced; terminal states do not change further.
 
-**On restart:** jobs live in memory only. In-flight `PENDING`/`RUNNING` jobs are not resumed after a process restart — they are lost when the container stops. This is acceptable per the exercise spec.
+**On restart:** jobs live in memory only. In-flight `PENDING`/`RUNNING` jobs are not resumed after a process restart — they are lost when the container stops. Acceptable for this exercise; flagged below as the first thing to fix for production use.
 
 ---
 
 ## Authentication
 
-| Channel | Mechanism |
-|---------|-----------|
-| HTTP `/api/*` | `Authorization: Bearer <token>` |
-| Socket.IO | `?token=<bearer>` on connect to `/socket.io/` |
+| Channel       | Mechanism                                       |
+| ------------- | -------------------------------------------------- |
+| HTTP `/api/*` | `Authorization: Bearer <token>`                    |
+| Socket.IO     | `?token=<bearer>` on connect to `/socket.io/`     |
 
 Tokens are static fixtures in `data/seed.json`. Invalid/missing credentials → `401` (HTTP) or disconnect (Socket.IO).
 
@@ -151,15 +158,15 @@ Tokens are static fixtures in `data/seed.json`. Invalid/missing credentials → 
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `8000` | Backend port |
-| `SEED_DATA_PATH` | `/app/data/seed.json` | Seed data file |
-| `CORS_ORIGINS` | `http://localhost:3000` | Allowed origins (HTTP + Socket.IO) |
-| `TRANSITION_TO_RUNNING_SECONDS` | `1.0` | PENDING → RUNNING delay |
-| `TRANSITION_TO_TERMINAL_SECONDS` | `1.0` | RUNNING → terminal delay |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend URL (browser) |
-| `NEXT_PUBLIC_SOCKET_URL` | `http://localhost:8000` | Socket.IO URL (browser) |
+| Variable                          | Default                   | Description                          |
+| ----------------------------------- | -------------------------- | --------------------------------------- |
+| `PORT`                             | `8000`                     | Backend port                           |
+| `SEED_DATA_PATH`                   | `/app/data/seed.json`      | Seed data file                         |
+| `CORS_ORIGINS`                     | `http://localhost:3000`    | Allowed origins (HTTP + Socket.IO)     |
+| `TRANSITION_TO_RUNNING_SECONDS`    | `1.0`                      | PENDING → RUNNING delay                |
+| `TRANSITION_TO_TERMINAL_SECONDS`   | `1.0`                      | RUNNING → terminal delay               |
+| `NEXT_PUBLIC_API_URL`              | `http://localhost:8000`    | Backend URL (browser)                  |
+| `NEXT_PUBLIC_SOCKET_URL`           | `http://localhost:8000`    | Socket.IO URL (browser)                |
 
 ---
 
@@ -173,12 +180,12 @@ Tokens are static fixtures in `data/seed.json`. Invalid/missing credentials → 
 - Minimal table UI, client-side rendering only
 - NestJS over plain Node for modular structure, guards, DI, and WebSocket gateway decorators
 
-**Would build next:**
+**Would build next for a production version:**
 
-- SQLite/Postgres with restart recovery for in-flight jobs
-- Proper auth (JWT + refresh)
-- Asset availability checks
-- CI pipeline running `docker compose up` + Playwright harness
+- SQLite/Postgres with restart recovery for in-flight jobs (resume timers from persisted state instead of losing them on crash)
+- Proper auth (JWT + refresh tokens)
+- Asset availability checks before accepting a job
+- CI pipeline running `docker compose up` + the Playwright harness on every push
 
 ---
 
